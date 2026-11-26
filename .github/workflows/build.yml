@@ -1,0 +1,29 @@
+name: Build ROB RUN Launcher
+
+on:
+workflow_dispatch:
+push:
+branches: [ main, master ]
+
+jobs:
+build:
+runs-on: windows-latest
+steps:
+- name: Checkout source
+uses: actions/checkout@v4
+
+  - name: Set up MSVC
+    uses: ilammy/msvc-dev-cmd@v1
+    with:
+      arch: x64
+
+  - name: Compile
+    shell: cmd
+    run: |
+      cl /nologo /std:c++17 /EHsc /DUNICODE /D_UNICODE main.cpp /link /SUBSYSTEM:WINDOWS comdlg32.lib /OUT:RobRunLauncher.exe
+
+  - name: Upload EXE
+    uses: actions/upload-artifact@v4
+    with:
+      name: RobRunLauncher-Windows-x64
+      path: RobRunLauncher.exe
