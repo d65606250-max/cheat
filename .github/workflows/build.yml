@@ -1,26 +1,26 @@
 name: Build ROB RUN Launcher
 
 'on':
-workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
-build:
-runs-on: windows-2022
+  build:
+    runs-on: windows-2022
 
-steps:
+    steps:
   - name: Checkout
     uses: actions/checkout@v4
 
-  - name: Setup MSVC
+      - name: Setup MSVC
     uses: ilammy/msvc-dev-cmd@v1
     with:
       arch: x64
 
-  - name: Compile
+      - name: Compile
     shell: cmd
     run: cl /nologo /std:c++17 /EHsc main.cpp /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib shell32.lib /OUT:RobRunLauncher.exe
 
-  - name: Upload EXE
+      - name: Upload EXE
     uses: actions/upload-artifact@v4
     with:
       name: RobRunLauncher-Windows-x64
