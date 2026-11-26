@@ -4,11 +4,11 @@ name: Build ROB RUN Launcher
 workflow_dispatch:
 
 jobs:
-build:
+  build:
 runs-on: windows-2022
-steps:
-- name: Checkout
-uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
   - name: Setup MSVC
     uses: ilammy/msvc-dev-cmd@v1
@@ -17,7 +17,8 @@ uses: actions/checkout@v4
 
   - name: Compile
     shell: cmd
-    run: cl /nologo /std:c++17 /EHsc /DUNICODE /D_UNICODE main.cpp /link /SUBSYSTEM:WINDOWS comdlg32.lib /OUT:RobRunLauncher.exe
+    run: |
+      cl /nologo /std:c++17 /EHsc /DUNICODE /D_UNICODE main.cpp /link /SUBSYSTEM:WINDOWS comdlg32.lib /OUT:RobRunLauncher.exe
 
   - name: Upload EXE
     uses: actions/upload-artifact@v4
