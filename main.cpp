@@ -6,71 +6,63 @@
 #include <filesystem>
 #include <cstdlib>
 
-namespace fs = std::filesystem;
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "shell32.lib")
 
+constexpr wchar_t APP_TITLE[] = L"ROB RUN Launcher";
 constexpr wchar_t STEAM_APP_ID[] = L"4262460";
 constexpr wchar_t STEAM_URI[] = L"steam://run/4262460";
 
-static HWND g_status = nullptr;
-static HWND g_log = nullptr;
-static std::wstring g_configDir;
-static std::wstring g_logPath;
-static HBRUSH g_backgroundBrush = nullptr;
-static HBRUSH g_controlBrush = nullptr;
+HWND g_status = nullptr;
+HWND g_log = nullptr;
+HWND g_launchButton = nullptr;
 
-std::wstring GetAppDataDir() {
+std::filesystem::path GetLogPath()
+{
 wchar_t* appData = nullptr;
-size_t len = 0;
+size_t size = 0;
 
-_wdupenv_s(&appData, &len, L"APPDATA");
+if (_wdupenv_s(&appData, &size, L"APPDATA") != 0 || !appData)
+    return L"RobRunLauncher.log";
 
-std::wstring result = appData ? appData : L".";
+std::filesystem::path folder =
+    std::filesystem::path(appData) / L"RobRunLauncher";
+
 free(appData);
 
-result += L"\\RobRunLauncher";
-return result;
+std::error_code ec;
+std::filesystem::create_directories(folder, ec);
+
+return folder / L"launcher.log";
 }
 
-void AppendLog(const std::wstring& message) {
-SYSTEMTIME st{};
-GetLocalTime(&st);
+void AppendLog(const std::wstring& message)
+{
+std::wofstream file(GetLogPath(), std::ios::app);
 
-std::wofstream file(g_logPath, std::ios::app);
+if (file.is_open())
+    file << message << L"\n";
 
-if (file) {
-    file << L"["
-         << st.wYear << L"-"
-         << st.wMonth << L"-"
-         << st.wDay << L" "
-         << st.wHour << L":"
-         << st.wMinute << L":"
-         << st.wSecond << L"] "
-         << message << L"\n";
-}
-
-if (g_log) {
-    int n = GetWindowTextLengthW(g_log);
-    SendMessageW(g_log, EM_SETSEL, n, n);
-
-    std::wstring line = message + L"\r\n";
-    SendMessageW(
-        g_log,
-        EM_REPLACESEL,
-        FALSE,
-        reinterpret_cast<LPARAM>(line.c_str())
-    );
+if (g_log)
+{
+    int length = GetWindowTextLengthW(g_log);
+    SendMessageW(g_log, EM_SETSEL, length, length);
+    SendMessageW(g_log, EM_REPLACESEL, FALSE,
+                 reinterpret_cast<LPARAM>((message + L"\r\n").c_str()));
 }
 }
 
-void SetStatus(const std::wstring& message) {
-if (g_status) {
-SetWindowTextW(g_status, message.c_str());
-}
+void SetStatus(const wchar_t* message)
+{
+if (g_status)
+SetWindowTextW(g_status, message);
 }
 
-void LaunchGame(HWND owner) {
-AppendLog(L"Requesting Steam launch for App ID: " +
-std::wstring(STEAM_APP_ID));
+void LaunchGame(HWND owner)
+{
+SetStatus(L"Opening Steam...");
+AppendLog(L"Requesting official Steam launch for ROB RUN.");
 
 HINSTANCE result = ShellExecuteW(
     owner,
@@ -81,13 +73,17 @@ HINSTANCE result = ShellExecuteW(
     SW_SHOWNORMAL
 );
 
-if (reinterpret_cast<INT_PTR>(result) <= 32) {
+INT_PTR code = reinterpret_cast<INT_PTR>(result);
+
+if (code <= 32)
+{
     wchar_t message[256]{};
 
     swprintf_s(
         message,
-        static_cast<long long>(reinterpret_cast<INT_PTR>(result))
-        reinterpret_cast<INT_PTR>(result)
+        _countof(message),
+        L"Could not open Steam. ShellExecute error: %lld",
+        static_cast<long long>(code)
     );
 
     SetStatus(L"Steam launch failed.");
@@ -96,237 +92,182 @@ if (reinterpret_cast<INT_PTR>(result) <= 32) {
     MessageBoxW(
         owner,
         message,
-        L"ROB RUN Launcher",
-        MB_ICONERROR
+        APP_TITLE,
+        MB_ICONERROR | MB_OK
     );
 
     return;
 }
 
 SetStatus(L"Steam launch request sent.");
-AppendLog(L"Steam launch request sent successfully.");
+AppendLog(L"Steam accepted the launch request.");
 
 MessageBoxW(
     owner,
-    L"Steam has received the launch request.\n"
-    L"The game will start through its official Steam configuration.",
-    L"ROB RUN Launcher",
-    MB_ICONINFORMATION
+    L"Launch request sent to Steam.\n"
+    L"Make sure Steam is running and ROB RUN is installed.",
+    APP_TITLE,
+    MB_ICONINFORMATION | MB_OK
 );
 }
 
-LRESULT CALLBACK WndProc(
+LRESULT CALLBACK WindowProc(
 HWND hwnd,
 UINT msg,
 WPARAM wParam,
 LPARAM lParam
-) {
-switch (msg) {
-case WM_CREATE: {
-HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+)
+{
+switch (msg)
+{
+case WM_CREATE:
+{
+CreateWindowW(
+L"STATIC",
+L"ROB RUN",
+WS_CHILD | WS_VISIBLE,
+30, 25, 400, 45,
+hwnd, nullptr, nullptr, nullptr
+);
 
-    auto make = [&](const wchar_t* cls,
-                    const wchar_t* text,
-                    DWORD style,
-                    int x, int y, int w, int h,
-                    int id) -> HWND {
-
-        HWND control = CreateWindowExW(
-            0,
-            cls,
-            text,
-            WS_CHILD | WS_VISIBLE | style,
-            x, y, w, h,
-            hwnd,
-            (HMENU)(INT_PTR)id,
-            GetModuleHandleW(nullptr),
-            nullptr
-        );
-
-        SendMessageW(
-            control,
-            WM_SETFONT,
-            (WPARAM)font,
-            TRUE
-        );
-
-        return control;
-    };
-
-    make(
+    CreateWindowW(
         L"STATIC",
-        L"ROB RUN",
-        SS_LEFT,
-        24, 20, 300, 36, 0
+        L"Steam App ID: 4262460",
+        WS_CHILD | WS_VISIBLE,
+        32, 75, 400, 25,
+        hwnd, nullptr, nullptr, nullptr
     );
 
-    make(
+    CreateWindowW(
         L"STATIC",
-        L"STEAM GAME LAUNCHER",
-        SS_LEFT,
-        26, 50, 300, 22, 0
+        L"Launch mode: Official Steam protocol",
+        WS_CHILD | WS_VISIBLE,
+        32, 105, 400, 25,
+        hwnd, nullptr, nullptr, nullptr
     );
 
-    make(
-        L"STATIC",
-        L"Steam App ID:",
-        SS_LEFT,
-        24, 100, 150, 22, 0
-    );
-
-    make(
-        L"STATIC",
-        STEAM_APP_ID,
-        SS_LEFT,
-        160, 100, 200, 22, 0
-    );
-
-    make(
-        L"STATIC",
-        L"Launch method: Official Steam protocol",
-        SS_LEFT,
-        24, 135, 500, 22, 0
-    );
-
-    make(
+    g_launchButton = CreateWindowW(
         L"BUTTON",
         L"START GAME THROUGH STEAM",
-        BS_PUSHBUTTON,
-        24, 175, 550, 44, 103
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        30, 150, 330, 42,
+        hwnd,
+        reinterpret_cast<HMENU>(1001),
+        GetModuleHandleW(nullptr),
+        nullptr
     );
 
-    g_status = make(
+    g_status = CreateWindowW(
         L"STATIC",
         L"Ready.",
-        SS_LEFT,
-        24, 235, 550, 22, 104
+        WS_CHILD | WS_VISIBLE,
+        32, 210, 450, 25,
+        hwnd, nullptr, nullptr, nullptr
     );
 
-    make(
+    CreateWindowW(
         L"STATIC",
-        L"Activity log",
-        SS_LEFT,24, 270, 200, 20, 0
+        L"Activity log:",
+        WS_CHILD | WS_VISIBLE,
+        32, 245, 400, 22,
+        hwnd, nullptr, nullptr, nullptr
     );
 
-    g_log = make(
+    g_log = CreateWindowExW(
+        WS_EX_CLIENTEDGE,
         L"EDIT",
         L"",
-        ES_MULTILINE |
-        ES_AUTOVSCROLL |
-        ES_READONLY |
-        WS_VSCROLL,
-        24, 295, 550, 115, 105
+        WS_CHILD | WS_VISIBLE |
+        ES_MULTILINE | ES_READONLY |
+        ES_AUTOVSCROLL | WS_VSCROLL,
+        30, 270, 450, 130,
+        hwnd, nullptr, GetModuleHandleW(nullptr), nullptr
     );
 
-    AppendLog(L"Launcher initialized.");
+    AppendLog(L"ROB RUN Launcher initialized.");
     AppendLog(L"Steam App ID: 4262460");
-    AppendLog(L"Launch mode: official Steam protocol.");
 
     return 0;
 }
 
 case WM_COMMAND:
-    if (LOWORD(wParam) == 103) {
+    if (LOWORD(wParam) == 1001)
+    {
         LaunchGame(hwnd);
         return 0;
     }
     break;
 
-case WM_CTLCOLORSTATIC:
-case WM_CTLCOLOREDIT: {
-    HDC hdc = (HDC)wParam;
-
-    SetTextColor(hdc, RGB(232, 236, 242));
-    SetBkColor(hdc, RGB(30, 34, 42));
-
-    return (LRESULT)g_controlBrush;
-}
-
-case WM_ERASEBKGND: {
-    RECT rect{};
-    GetClientRect(hwnd, &rect);
-
-    FillRect(
-        (HDC)wParam,
-        &rect,
-        g_backgroundBrush
-    );
-
-    return 1;
-}
-
 case WM_DESTROY:
-    DeleteObject(g_backgroundBrush);
-    DeleteObject(g_controlBrush);
-    PostQuitMessage(0);
-    return 0;
+    PostQuitMessage(0);return 0;
 }
 
 return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 int WINAPI wWinMain(
-HINSTANCE instance,
+HINSTANCE hInstance,
 HINSTANCE,
 PWSTR,
-int show
-) {
-g_configDir = GetAppDataDir();
-
-std::error_code ec;
-fs::create_directories(g_configDir, ec);
-
-g_logPath = g_configDir + L"\\launcher.log";
-
-g_backgroundBrush = CreateSolidBrush(RGB(22, 25, 32));
-g_controlBrush = CreateSolidBrush(RGB(30, 34, 42));
-
-const wchar_t CLASS_NAME[] = L"RobRunSteamLauncher";
+int nCmdShow
+)
+{
+const wchar_t CLASS_NAME[] = L"RobRunLauncherWindow";
 
 WNDCLASSW wc{};
-wc.lpfnWndProc = WndProc;
-wc.hInstance = instance;
+wc.lpfnWndProc = WindowProc;
+wc.hInstance = hInstance;
 wc.lpszClassName = CLASS_NAME;
 wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
-wc.hbrBackground = g_backgroundBrush;
+wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
 
-if (!RegisterClassW(&wc)) {
+if (!RegisterClassW(&wc))
+{
+    MessageBoxW(
+        nullptr,
+        L"Could not register window class.",
+        APP_TITLE,
+        MB_ICONERROR
+    );
     return 1;
 }
 
 HWND hwnd = CreateWindowExW(
     0,
     CLASS_NAME,
-    L"ROB RUN | Steam Launcher",
-    WS_OVERLAPPED |
-    WS_CAPTION |
-    WS_SYSMENU |
-    WS_MINIMIZEBOX,
+    APP_TITLE,
+    WS_OVERLAPPEDWINDOW,
     CW_USEDEFAULT,
     CW_USEDEFAULT,
-    620,
-    480,
+    540,
+    470,
     nullptr,
     nullptr,
-    instance,
+    hInstance,
     nullptr
 );
 
-if (!hwnd) {
-    DeleteObject(g_backgroundBrush);
-    DeleteObject(g_controlBrush);
+if (!hwnd)
+{
+    MessageBoxW(
+        nullptr,
+        L"Could not create launcher window.",
+        APP_TITLE,
+        MB_ICONERROR
+    );
     return 1;
 }
 
-ShowWindow(hwnd, show);
+ShowWindow(hwnd, nCmdShow);
 UpdateWindow(hwnd);
 
 MSG msg{};
 
-while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+while (GetMessageW(&msg, nullptr, 0, 0) > 0)
+{
     TranslateMessage(&msg);
     DispatchMessageW(&msg);
 }
 
-return (int)msg.wParam;
+return static_cast<int>(msg.wParam);
 }
