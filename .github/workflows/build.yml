@@ -1,6 +1,6 @@
 name: ROB RUN Launcher Build
 
-on:
+'on':
 workflow_dispatch: {}
 
 jobs:
