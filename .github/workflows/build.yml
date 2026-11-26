@@ -1,9 +1,11 @@
 name: Build ROB RUN Launcher
 
-on:
+"on":
 workflow_dispatch:
 push:
-branches: [ main, master ]
+branches:
+- main
+- master
 
 jobs:
 build:
@@ -17,7 +19,7 @@ uses: actions/checkout@v4
     with:
       arch: x64
 
-  - name: Compile
+  - name: Compile EXE
     shell: cmd
     run: |
       cl /nologo /std:c++17 /EHsc /DUNICODE /D_UNICODE main.cpp /link /SUBSYSTEM:WINDOWS comdlg32.lib /OUT:RobRunLauncher.exe
