@@ -86,7 +86,7 @@ if (reinterpret_cast<INT_PTR>(result) <= 32) {
 
     swprintf_s(
         message,
-        L"Could not open Steam. Windows error: %ld",
+        static_cast<long long>(reinterpret_cast<INT_PTR>(result))
         reinterpret_cast<INT_PTR>(result)
     );
 
@@ -287,7 +287,7 @@ WNDCLASSW wc{};
 wc.lpfnWndProc = WndProc;
 wc.hInstance = instance;
 wc.lpszClassName = CLASS_NAME;
-wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
 wc.hbrBackground = g_backgroundBrush;
 
 if (!RegisterClassW(&wc)) {
