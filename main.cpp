@@ -1,273 +1,280 @@
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>
 #include <string>
-#include <fstream>
-#include <filesystem>
-#include <cstdlib>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "shell32.lib")
 
-constexpr wchar_t APP_TITLE[] = L"ROB RUN Launcher";
-constexpr wchar_t STEAM_APP_ID[] = L"4262460";
+constexpr wchar_t APP_TITLE[] = L"REX MENU";
 constexpr wchar_t STEAM_URI[] = L"steam://run/4262460";
 
+constexpr int ID_LAUNCH = 1001;
+constexpr int ID_VISUAL = 1002;
+constexpr int ID_AIM = 1003;
+constexpr int ID_LOOT = 1004;
+constexpr int ID_TOPMOST = 1005;
+constexpr int HOTKEY_INSERT = 1;
+
 HWND g_status = nullptr;
-HWND g_log = nullptr;
-HWND g_launchButton = nullptr;
+HWND g_main = nullptr;
 
-std::filesystem::path GetLogPath()
+HBRUSH g_background = nullptr;
+HBRUSH g_controlBackground = nullptr;
+
+COLORREF BG_COLOR = RGB(12, 12, 12);
+COLORREF PANEL_COLOR = RGB(27, 27, 27);
+COLORREF TEXT_COLOR = RGB(235, 235, 235);
+COLORREF MUTED_COLOR = RGB(145, 145, 145);
+
+void SetStatus(const wchar_t* text)
 {
-wchar_t* appData = nullptr;
-size_t size = 0;
-
-if (_wdupenv_s(&appData, &size, L"APPDATA") != 0 || !appData)
-    return L"RobRunLauncher.log";
-
-std::filesystem::path folder =
-    std::filesystem::path(appData) / L"RobRunLauncher";
-
-free(appData);
-
-std::error_code ec;
-std::filesystem::create_directories(folder, ec);
-
-return folder / L"launcher.log";
+    SetWindowTextW(g_status, text);
 }
 
-void AppendLog(const std::wstring& message)
+HWND AddControl(
+    const wchar_t* type,
+    const wchar_t* text,
+    DWORD style,
+    int x, int y, int w, int h,
+    int id,
+    HWND parent)
 {
-std::wofstream file(GetLogPath(), std::ios::app);
-
-if (file.is_open())
-    file << message << L"\n";
-
-if (g_log)
-{
-    int length = GetWindowTextLengthW(g_log);
-    SendMessageW(g_log, EM_SETSEL, length, length);
-    SendMessageW(g_log, EM_REPLACESEL, FALSE,
-                 reinterpret_cast<LPARAM>((message + L"\r\n").c_str()));
-}
-}
-
-void SetStatus(const wchar_t* message)
-{
-if (g_status)
-SetWindowTextW(g_status, message);
-}
-
-void LaunchGame(HWND owner)
-{
-SetStatus(L"Opening Steam...");
-AppendLog(L"Requesting official Steam launch for ROB RUN.");
-
-HINSTANCE result = ShellExecuteW(
-    owner,
-    L"open",
-    STEAM_URI,
-    nullptr,
-    nullptr,
-    SW_SHOWNORMAL
-);
-
-INT_PTR code = reinterpret_cast<INT_PTR>(result);
-
-if (code <= 32)
-{
-    wchar_t message[256]{};
-
-    swprintf_s(
-        message,
-        _countof(message),
-        L"Could not open Steam. ShellExecute error: %lld",
-        static_cast<long long>(code)
-    );
-
-    SetStatus(L"Steam launch failed.");
-    AppendLog(message);
-
-    MessageBoxW(
-        owner,
-        message,
-        APP_TITLE,
-        MB_ICONERROR | MB_OK
-    );
-
-    return;
-}
-
-SetStatus(L"Steam launch request sent.");
-AppendLog(L"Steam accepted the launch request.");
-
-MessageBoxW(
-    owner,
-    L"Launch request sent to Steam.\n"
-    L"Make sure Steam is running and ROB RUN is installed.",
-    APP_TITLE,
-    MB_ICONINFORMATION | MB_OK
-);
-}
-
-LRESULT CALLBACK WindowProc(
-HWND hwnd,
-UINT msg,
-WPARAM wParam,
-LPARAM lParam
-)
-{
-switch (msg)
-{
-case WM_CREATE:
-{
-CreateWindowW(
-L"STATIC",
-L"ROB RUN",
-WS_CHILD | WS_VISIBLE,
-30, 25, 400, 45,
-hwnd, nullptr, nullptr, nullptr
-);
-
-    CreateWindowW(
-        L"STATIC",
-        L"Steam App ID: 4262460",
-        WS_CHILD | WS_VISIBLE,
-        32, 75, 400, 25,
-        hwnd, nullptr, nullptr, nullptr
-    );
-
-    CreateWindowW(
-        L"STATIC",
-        L"Launch mode: Official Steam protocol",
-        WS_CHILD | WS_VISIBLE,
-        32, 105, 400, 25,
-        hwnd, nullptr, nullptr, nullptr
-    );
-
-    g_launchButton = CreateWindowW(
-        L"BUTTON",
-        L"START GAME THROUGH STEAM",
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        30, 150, 330, 42,
-        hwnd,
-        reinterpret_cast<HMENU>(1001),
+    return CreateWindowW(
+        type,
+        text,
+        WS_CHILD | WS_VISIBLE | style,
+        x, y, w, h,
+        parent,
+        reinterpret_cast<HMENU>(
+            static_cast<INT_PTR>(id)),
         GetModuleHandleW(nullptr),
         nullptr
     );
-
-    g_status = CreateWindowW(
-        L"STATIC",
-        L"Ready.",
-        WS_CHILD | WS_VISIBLE,
-        32, 210, 450, 25,
-        hwnd, nullptr, nullptr, nullptr
-    );
-
-    CreateWindowW(
-        L"STATIC",
-        L"Activity log:",
-        WS_CHILD | WS_VISIBLE,
-        32, 245, 400, 22,
-        hwnd, nullptr, nullptr, nullptr
-    );
-
-    g_log = CreateWindowExW(
-        WS_EX_CLIENTEDGE,
-        L"EDIT",
-        L"",
-        WS_CHILD | WS_VISIBLE |
-        ES_MULTILINE | ES_READONLY |
-        ES_AUTOVSCROLL | WS_VSCROLL,
-        30, 270, 450, 130,
-        hwnd, nullptr, GetModuleHandleW(nullptr), nullptr
-    );
-
-    AppendLog(L"ROB RUN Launcher initialized.");
-    AppendLog(L"Steam App ID: 4262460");
-
-    return 0;
 }
 
-case WM_COMMAND:
-    if (LOWORD(wParam) == 1001)
+void LaunchGame()
+{
+    SetStatus(L"Connecting to Steam...");
+
+    HINSTANCE result = ShellExecuteW(
+        g_main,
+        L"open",
+        STEAM_URI,
+        nullptr,
+        nullptr,
+        SW_SHOWNORMAL
+    );
+
+    if (reinterpret_cast<INT_PTR>(result) <= 32)
     {
-        LaunchGame(hwnd);
+        SetStatus(L"Steam launch failed.");
+        return;
+    }
+
+    SetStatus(L"ROB RUN launch request sent.");
+}
+
+void CreateMenu(HWND hwnd)
+{
+    AddControl(
+        L"STATIC", L"REX MENU",
+        0, 25, 20, 400, 45, 0, hwnd
+    );
+
+    AddControl(
+        L"STATIC", L"ROB RUN  |  GAME PANEL",
+        0, 27, 65, 400, 22, 0, hwnd
+    );
+
+    AddControl(
+        L"STATIC", L"VISUAL SETTINGS",
+        0, 27, 110, 400, 25, 0, hwnd
+    );
+
+    AddControl(
+        L"BUTTON", L"Show interface indicators",
+        BS_AUTOCHECKBOX,
+        30, 140, 400, 28, ID_VISUAL, hwnd
+    );
+
+    AddControl(
+        L"STATIC", L"AIM SETTINGS",
+        0, 27, 185, 400, 25, 0, hwnd
+    );
+
+    AddControl(
+        L"BUTTON", L"Enable sensitivity settings panel",
+        BS_AUTOCHECKBOX,
+        30, 215, 400, 28, ID_AIM, hwnd
+    );
+
+    AddControl(
+        L"STATIC", L"LOOT SETTINGS",
+        0, 27, 260, 400, 25, 0, hwnd
+    );
+
+    AddControl(
+        L"BUTTON", L"Show loot notifications",
+        BS_AUTOCHECKBOX,
+        30, 290, 400, 28, ID_LOOT, hwnd
+    );
+
+    AddControl(
+        L"BUTTON", L"Keep menu above other windows",
+        BS_AUTOCHECKBOX | BS_CHECKED,
+        30, 325, 400, 28, ID_TOPMOST, hwnd
+    );
+
+    AddControl(
+        L"BUTTON", L"START ROB RUN",
+        BS_PUSHBUTTON,
+        30, 370, 420, 42, ID_LAUNCH, hwnd
+    );
+
+    g_status = AddControl(
+        L"STATIC", L"Ready.",
+        0, 30, 425, 420, 25, 0, hwnd
+    );
+}
+
+LRESULT CALLBACK WindowProc(
+    HWND hwnd,
+    UINT msg,
+    WPARAM wParam,
+    LPARAM lParam)
+{
+    switch (msg)
+    {
+    case WM_CREATE:
+        CreateMenu(hwnd);
+        return 0;
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam))
+        {
+        case ID_LAUNCH:
+            LaunchGame();
+            return 0;
+
+        case ID_TOPMOST:
+        {
+            bool enabled =
+                SendMessageW(
+                    GetDlgItem(hwnd, ID_TOPMOST),
+                    BM_GETCHECK, 0, 0
+                ) == BST_CHECKED;
+
+            SetWindowPos(
+                hwnd,
+                enabled ? HWND_TOPMOST : HWND_NOTOPMOST,
+                0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE
+            );
+
+            return 0;
+        }
+        }
+        return 0;
+
+    case WM_HOTKEY:
+        if (wParam == HOTKEY_INSERT)
+        {
+            if (IsWindowVisible(hwnd))
+                ShowWindow(hwnd, SW_HIDE);
+            else
+            {
+                ShowWindow(hwnd, SW_SHOW);
+                SetWindowPos(
+                    hwnd, HWND_TOPMOST,
+                    0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE
+                );
+            }
+        }
+        return 0;
+
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN:
+    case WM_CTLCOLOREDIT:
+    {
+        HDC dc = reinterpret_cast<HDC>(wParam);
+
+        SetTextColor(dc, TEXT_COLOR);
+        SetBkColor(dc, BG_COLOR);
+
+        return reinterpret_cast<LRESULT>(g_background);
+    }
+
+    case WM_DESTROY:
+        UnregisterHotKey(hwnd, HOTKEY_INSERT);
+        PostQuitMessage(0);
         return 0;
     }
-    break;
 
-case WM_DESTROY:
-    PostQuitMessage(0);return 0;
-}
-
-return DefWindowProcW(hwnd, msg, wParam, lParam);
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 int WINAPI wWinMain(
-HINSTANCE hInstance,
-HINSTANCE,
-PWSTR,
-int nCmdShow
-)
+    HINSTANCE hInstance,
+    HINSTANCE,
+    PWSTR,
+    int nCmdShow)
 {
-const wchar_t CLASS_NAME[] = L"RobRunLauncherWindow";
+    g_background = CreateSolidBrush(BG_COLOR);
+    g_controlBackground = CreateSolidBrush(PANEL_COLOR);
 
-WNDCLASSW wc{};
-wc.lpfnWndProc = WindowProc;
-wc.hInstance = hInstance;
-wc.lpszClassName = CLASS_NAME;
-wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
-wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    const wchar_t CLASS_NAME[] = L"REX_MENU_WINDOW";
 
-if (!RegisterClassW(&wc))
-{
-    MessageBoxW(
-        nullptr,
-        L"Could not register window class.",
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = CLASS_NAME;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = g_background;
+
+    if (!RegisterClassW(&wc))
+        return 1;
+
+    g_main = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+        CLASS_NAME,
         APP_TITLE,
-        MB_ICONERROR
-    );
-    return 1;
-}
-
-HWND hwnd = CreateWindowExW(
-    0,
-    CLASS_NAME,
-    APP_TITLE,
-    WS_OVERLAPPEDWINDOW,
-    CW_USEDEFAULT,
-    CW_USEDEFAULT,
-    540,
-    470,
-    nullptr,
-    nullptr,
-    hInstance,
-    nullptr
-);
-
-if (!hwnd)
-{
-    MessageBoxW(
+        WS_OVERLAPPED | WS_CAPTION |
+        WS_SYSMENU | WS_MINIMIZEBOX,
+        100, 100,
+        500, 510,
         nullptr,
-        L"Could not create launcher window.",
-        APP_TITLE,
-        MB_ICONERROR
+        nullptr,
+        hInstance,
+        nullptr
     );
-    return 1;
-}
 
-ShowWindow(hwnd, nCmdShow);
-UpdateWindow(hwnd);
+    if (!g_main)
+        return 1;
 
-MSG msg{};
+    RegisterHotKey(
+        g_main,
+        HOTKEY_INSERT,
+        0,
+        VK_INSERT
+    );
 
-while (GetMessageW(&msg, nullptr, 0, 0) > 0)
-{
-    TranslateMessage(&msg);
-    DispatchMessageW(&msg);
-}
+    ShowWindow(g_main, nCmdShow);
+    UpdateWindow(g_main);
 
-return static_cast<int>(msg.wParam);
+    MSG msg{};
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0)
+    {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    DeleteObject(g_background);
+    DeleteObject(g_controlBackground);
+
+    return static_cast<int>(msg.wParam);
 }
