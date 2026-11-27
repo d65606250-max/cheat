@@ -122,11 +122,14 @@ void CreateMenu(HWND hwnd)
         30, 290, 400, 28, ID_LOOT, hwnd
     );
 
-    AddControl(
-        L"BUTTON", L"Keep menu above other windows",
-        BS_AUTOCHECKBOX | BS_CHECKED,
-        30, 325, 400, 28, ID_TOPMOST, hwnd
-    );
+   AddControl(
+    L"BUTTON",
+    L"Keep menu above other windows",
+    BS_AUTOCHECKBOX,
+    30, 325, 420, 28,
+    ID_TOPMOST,
+    hwnd
+);
 
     AddControl(
         L"BUTTON", L"START ROB RUN",
@@ -232,7 +235,10 @@ int WINAPI wWinMain(
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hCursor = LoadCursorW(
+    nullptr,
+    MAKEINTRESOURCEW(32512)
+);
     wc.hbrBackground = g_background;
 
     if (!RegisterClassW(&wc))
